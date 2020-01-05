@@ -1,0 +1,123 @@
+这是使用原型最后的代码，里面有
+jquery elements oldApi get 
+append appendTo （这两个函数没有返回结果）
+each（依旧返回操作这个元素的对象）  print（可以依旧返回操作这个元素的对象，也可以不返回）
+find （返回操作找到的元素数组的对象）
+end （返回上一级的对象）
+addClass （依旧返回操作这个元素的对象）
+parent child (这两个函数里，返回的是（可以操作找到的元素组成的数组的）对象)
+--------------------------------------------------------------------------------------------------------
+[因为每个jQuery构成的对象中，elemens和oldApi是不一样的，所以这两个不能放在原型prototype中]
+--------------------------------------------------------------------------------------------------------
+思路梳理：
+1：window.jQuery = function() {};
+//定义一个jQuery函数，也就是一个对象，因为函数就是对象嘛。
+//传递一个选择器，获取到这个选择器对应的元素数组；
+//然后返回一个对象，这个对象提供了一些可以操作获取到的元素数组的api，也就是方法，函数。
+2：window.jQuery = function(se) {
+  let elements = document.querySelectorAll(se);
+  let api = {
+    addClass(clsn) {
+      for (let q = 0; q < elements.length; q++) {
+        console.log(elements[q]);
+        elements[q].classList.add(clsn);
+      }
+	//return api;!!!!
+	return this;
+    }
+  };
+  return api;
+}; 
+//elements就是获取到的元素数组
+//api就是操作这些元素数组的对象，最后返回的也是这个api
+//api对象里面具体有方法，函数addClass去操作元素数组elements
+//思考：addClass调用之后，继续返回这个api对象，以便接着对获取到的元素数组elements进行操作，那么就需要在这个addClass函数里返回这个api对象！！！
+//注意：我们这里在对象的方法也就是函数中返回了这个对象，这是可以的！！!即在函数addClass中return api
+//》返回这个对象，其实也就是this。之前说过若用一个对象去调用函数，那么函数里的this就是这个对象。所以在addClass里return api也可换做return this！！！
+***********************************************
+//为什么要将return api换做return this呢；因为后面的api将要省略掉，成为匿名的对象，直接返回这个匿名的对象
+现在大致的框架是这样的：
+window.jQuery = function(se) {
+ 1》 let elements = document.querySelectorAll(se);
+ 2》 	let api = {
+    	//添加class，这里1用到了闭包，使用到了外面的elements变量
+    	addClass(clsn) {
+     		 -------操作语句--------
+     	 return this;
+    		}
+  	};
+ 3 》return api;
+};
+将其变为：
+window.jQuery = function(se) {
+ 1》 let elements = document.querySelectorAll(se);
+ 2》 return {
+              //添加class，这里1用到了闭包，使用到了外面的elements变量
+    	addClass(clsn) {
+     	 -------操作语句--------
+     	       return this;
+    		}
+  	 };
+}；
+直接return，没有api了！！！
+//接着定义一个find函数，找到对应的元素数组res，
+//这里有一个值得思考的问题，find函数中，需要返回的是什么呢？
+//如果返回的是查找到的元素数组res，并不符合我们的要求。我们要返回的是可以操作这个元素数组的对象呀！！！
+//另外若想回到上一级,去操作上一级的elements，要怎么做？
+这里提供了一个解决思路，返回jQuery(res),即返回的是操作res的对象
+同时将当前的对象（api也就是this）记录下来，
+两个地方要记录，一是将当前对象api也就是this添加到数组res中
+另外要在（api）对象中新增加一个属性oldApi，去记录上一级的对象
+它的值就是res.oldApi,但其实不是res.api，
+因为在使用jQuery函数构造新的对象的时候，将res的值给了se；
+另外对elements的获取也要进行判断，
+当se是选择器的时候，直接在body中查找；
+  若为数组的时候，那就还是这个数组！！！
+那这样的话，属性oldApi的值就是elements.oldApi!!!
+window.jQuery = function(se) {
+1》 let elements ;
+      if（typeof se==="string"）{
+             elements = document.querySelectorAll(se);
+          }else if（se instanceof Array）{
+              elements = se;
+         }
+ 2》 return {
+	oldApi:se.oldApi,
+/////////////////////////////////////////////////////////////////////////////
+              //添加class，这里1用到了闭包，使用到了外面的elements变量
+    	addClass(clsn) {
+     	 -------操作语句--------
+     	       return this;
+    		},
+/////////////////////////////////////////////////////////////////////////
+	find(){
+    	      let res = [];
+                      for (let w = 0; w < elements.length; w++) {
+                           let res1 = Array.from(elements[w].querySelectorAll(sel));
+                      res = res.concat(res1);
+                   }
+      //return res; //在这里不应该return res；res只是获取到的元素组成的数组，所以要思考返
+                       res.oldApi = this;
+     	       jQuery(res);
+                     }
+////////////////////////////////////////////////////////////////////////
+  	 };
+}；
+////////////////////////////////////////////////////
+接着要想返回到上一级对象，要用一个end（）函数，去return 对象的oldApi属性
+///////////////////////////////////////////////////////////
+下面添加了each和print函数，方便查看当前对象中的elements和遍历循环。
+///////////////////////////////////////////////////////////
+接着写parent和child函数，这两个函数返回的就是[操作(查找到的)元素数组的]对象，其实也可以加上现在的对象this=api，这样也可以使用end方法了
+///////////////////////////////////////////////////////////
+写append和appendTo的函数，这里没有return，其实也可以return this，就是当前对象api
+注意想要在jQuery中新创建一个元素，那么考虑传入的参数就需要是以尖括号开头的，
+所以这里对于创建elements的逻辑还要进行修改
+还要事先定义一个函数createElement去创建元素；*****在这里涉及到了一个函数以及变量声明提前的知识点！！！以及比如说在parent函数中使用this.each这些知识点！！！
+切记elements要是一个数组，哪怕只有一个元素！！！
+**************************************************
+还有不管是append给当前对象的elements新增加子元素,
+还是appendTo把当前对象的elements添加到一个父节点中作为子节点，
+默认的父节点都只有一个。
+也就是说在append（x）的方法中，参数x（是子节点）里面可能有多个元素
+在appendTo（x）的方法中，参数x（父节点）里面只能有1个元素
